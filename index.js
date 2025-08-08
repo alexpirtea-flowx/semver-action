@@ -86,7 +86,7 @@ async function main () {
     }
   
     const tagsRaw = allTags;
-
+    core.info(`Fetched a total of : ${tagsRaw.length}`)
     const tagsList = _.get(tagsRaw, 'repository.refs.nodes', [])
     if (tagsList.length < 1) {
       if (fallbackTag && semver.valid(fallbackTag)) {
