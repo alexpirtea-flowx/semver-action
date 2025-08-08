@@ -52987,37 +52987,50 @@ async function main () {
   if (!fromTag) {
     // GET LATEST + PREVIOUS TAGS
 
-    const tagsRaw = await gh.graphql(`
-      query lastTags (
-        $owner: String!
-        $repo: String!
-        $fetchLimit: Int
-        ) {
-        repository (
-          owner: $owner
-          name: $repo
-          ) {
-          refs(
-            first: $fetchLimit
-            refPrefix: "refs/tags/"
-            orderBy: { field: TAG_COMMIT_DATE, direction: DESC }
+    let hasNextPage = true;
+    let cursor = null;
+    const allTags = [];
+  
+    while (hasNextPage) {
+      const result = await gh.graphql(
+        `
+        query lastTags($owner: String!, $repo: String!, $cursor: String) {
+          repository(owner: $owner, name: $repo) {
+            refs(
+              first: 100
+              after: $cursor
+              refPrefix: "refs/tags/"
+              orderBy: { field: TAG_COMMIT_DATE, direction: DESC }
             ) {
-            nodes {
-              name
-              target {
-                oid
+              nodes {
+                name
+                target {
+                  oid
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
               }
             }
           }
         }
-      }
-    `,
-    {
-      owner,
-      repo,
-      fetchLimit
-    })
-
+      `,
+        {
+          owner,
+          repo,
+          cursor
+        }
+      );
+  
+      const refs = result.repository.refs;
+      allTags.push(...refs.nodes);
+      hasNextPage = refs.pageInfo.hasNextPage;
+      cursor = refs.pageInfo.endCursor;
+    }
+  
+    const tagsRaw = allTags;
+    core.info(`Fetched a total of : ${tagsRaw.length}`)
     const tagsList = _.get(tagsRaw, 'repository.refs.nodes', [])
     if (tagsList.length < 1) {
       if (fallbackTag && semver.valid(fallbackTag)) {
