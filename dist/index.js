@@ -53029,9 +53029,9 @@ async function main () {
       cursor = refs.pageInfo.endCursor;
     }
   
-    const tagsRaw = allTags;
-    core.info(`Fetched a total of : ${tagsRaw.length}`)
-    const tagsList = _.get(tagsRaw, 'repository.refs.nodes', [])
+    core.info(`Fetched a total of : ${allTags.length}`)
+    core.info(`[debug] tags fetched : ${JSON.stringify(allTags)}`)
+    const tagsList = allTags
     if (tagsList.length < 1) {
       if (fallbackTag && semver.valid(fallbackTag)) {
         core.info(`Using fallback tag: ${fallbackTag}`)
