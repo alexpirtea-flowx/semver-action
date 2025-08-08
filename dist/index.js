@@ -53029,8 +53029,7 @@ async function main () {
       cursor = refs.pageInfo.endCursor;
     }
   
-    core.info(`Fetched a total of : ${allTags.length}`)
-    core.info(`[debug] tags fetched : ${JSON.stringify(allTags)}`)
+    core.info(`Fetched a total of : ${allTags.length} tags`)
     const tagsList = allTags
     if (tagsList.length < 1) {
       if (fallbackTag && semver.valid(fallbackTag)) {
