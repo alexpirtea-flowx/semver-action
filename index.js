@@ -4,6 +4,29 @@ const _ = require('lodash')
 const cc = require('@conventional-commits/parser')
 const semver = require('semver')
 
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504])
+
+function isRetryable (err) {
+  if (err.status && RETRYABLE_STATUS_CODES.has(err.status)) return true
+  if (err.message && /ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(err.message)) return true
+  return false
+}
+
+async function retryRequest (fn, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (attempt === maxRetries || !isRetryable(err)) {
+        throw err
+      }
+      const delay = Math.pow(2, attempt) * 1000
+      core.info(`Request failed (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}. Retrying in ${delay}ms...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+}
+
 async function main () {
   const token = core.getInput('token')
   const branch = core.getInput('branch')
@@ -48,7 +71,7 @@ async function main () {
     const allTags = [];
   
     while (hasNextPage) {
-      const result = await gh.graphql(
+      const result = await retryRequest(() => gh.graphql(
         `
         query lastTags($owner: String!, $repo: String!, $cursor: String) {
           repository(owner: $owner, name: $repo) {
@@ -77,7 +100,7 @@ async function main () {
           repo,
           cursor
         }
-      );
+      ));
   
       const refs = result.repository.refs;
       allTags.push(...refs.nodes);
@@ -142,7 +165,7 @@ async function main () {
   } else {
     // GET SPECIFIC TAG
 
-    const tagRaw = await gh.graphql(`
+    const tagRaw = await retryRequest(() => gh.graphql(`
       query singleTag ($owner: String!, $repo: String!, $tag: String!) {
         repository (owner: $owner, name: $repo) {
           ref(qualifiedName: $tag) {
@@ -157,7 +180,7 @@ async function main () {
       owner,
       repo,
       tag: `refs/tags/${prefix}${fromTag}`
-    })
+    }))
 
     latestTag = _.get(tagRaw, 'repository.ref')
 
@@ -188,13 +211,13 @@ async function main () {
   do {
     hasMoreCommits = false
     curPage++
-    const commitsRaw = await gh.rest.repos.compareCommitsWithBasehead({
+    const commitsRaw = await retryRequest(() => gh.rest.repos.compareCommitsWithBasehead({
       owner,
       repo,
       basehead: `${prefix}${latestTag.name}...${branch}`,
       page: curPage,
       per_page: 100
-    })
+    }))
     totalCommits = _.get(commitsRaw, 'data.total_commits', 0)
     const rangeCommits = _.get(commitsRaw, 'data.commits', [])
     commits.push(...rangeCommits)
